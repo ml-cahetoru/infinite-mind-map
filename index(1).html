@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Infinite Mind Map</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --panel: rgba(255,255,255,.96);
+    --panel-border: #d9dce5;
+    --text: #171922;
+    --muted: #697084;
+    --bubble: #ffffff;
+    --bubble-border: #b8bfd0;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --line: #667085;
+    --grid: rgba(110, 118, 138, 0.11);
+    --shadow: 0 10px 28px rgba(15, 23, 42, .10);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  body.dark {
+    --bg: #0d0f14;
+    --panel: rgba(20,23,31,.96);
+    --panel-border: #2a2f3b;
+    --text: #f5f7fb;
+    --muted: #9aa3b5;
+    --bubble: #171b24;
+    --bubble-border: #424a5d;
+    --accent: #8b7cff;
+    --accent-soft: #26233f;
+    --line: #a6aec0;
+    --grid: rgba(167, 178, 200, .09);
+    --shadow: 0 10px 28px rgba(0,0,0,.35);
+  }
+
+  #app {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: var(--bg);
+  }
+
+  /* Fixed toolbar: never participates in canvas panning. */
+  #toolbar {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    bottom: 16px;
+    width: 252px;
+    z-index: 100;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    backdrop-filter: blur(14px);
+  }
+
+  .brand {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -.02em;
+  }
+
+  .subtle {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .section {
+    display: grid;
+    gap: 8px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .tool-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  button, select, input[type="color"] {
+    font: inherit;
+  }
+
+  .tool-btn,
+  .action-btn {
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 11px;
+    min-height: 42px;
+    padding: 9px 10px;
+    cursor: pointer;
+    transition: .14s ease;
+  }
+
+  .tool-btn:hover,
+  .action-btn:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  .tool-btn.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .action-btn:disabled {
+    opacity: .42;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  select {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--text);
+    padding: 0 10px;
+    outline: none;
+  }
+
+  #lineColor {
+    width: 48px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    padding: 3px;
+    background: var(--panel);
+    cursor: pointer;
+  }
+
+  .tips {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--panel-border);
+  }
+
+  .tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin: 6px 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  kbd {
+    display: inline-flex;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    background: var(--bg);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  /* Canvas area */
+  #canvasViewport {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    cursor: grab;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  #canvasViewport.is-panning {
+    cursor: grabbing;
+  }
+
+  #world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 200000px;
+    height: 200000px;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  #links {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  #links line {
+    stroke: var(--line);
+    stroke-width: 3;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+  }
+
+  #bubbles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .bubble {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    max-width: 250px;
+    min-width: 90px;
+    padding: 13px 17px;
+    border-radius: 22px;
+    border: 2px solid var(--bubble-border);
+    background: var(--bubble);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    font-size: 16px;
+    line-height: 1.25;
+    text-align: center;
+    user-select: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    pointer-events: auto;
+  }
+
+  .bubble.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent), var(--shadow);
+  }
+
+  .bubble.editing {
+    cursor: text;
+    min-width: 160px;
+    padding: 9px 12px;
+  }
+
+  .bubble input {
+    width: 100%;
+    min-width: 140px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: inherit;
+    text-align: center;
+    font: inherit;
+  }
+
+  #status {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 90;
+    background: var(--panel);
+    color: var(--muted);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 8px 11px;
+    font-size: 11px;
+    box-shadow: var(--shadow);
+    pointer-events: none;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="toolbar" aria-label="Mind map tools">
+    <div>
+      <div class="brand">Infinite Mind Map</div>
+      <div class="subtle">A freeform canvas for bubbles and relationships.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Tools</div>
+      <div class="tool-grid">
+        <button class="tool-btn active" data-tool="pan" title="Pan the canvas">✋ Pan</button>
+        <button class="tool-btn" data-tool="text" title="Create a text bubble">T Text</button>
+        <button class="tool-btn" data-tool="erase" title="Erase a bubble">⌫ Erase</button>
+        <button class="tool-btn" data-tool="link" title="Connect two bubbles">↗ Link</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">History</div>
+      <div class="actions">
+        <button id="undoBtn" class="action-btn" disabled>↶ Undo</button>
+        <button id="redoBtn" class="action-btn" disabled>↷ Redo</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Appearance</div>
+
+      <div class="field">
+        <label for="themeSelect" class="subtle">Theme</label>
+        <select id="themeSelect">
+          <option value="light">White</option>
+          <option value="dark">Black</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="subtle" for="lineColor">Link colour</label>
+        <div class="field-row">
+          <span class="subtle">Colour used for every connecting line.</span>
+          <input id="lineColor" type="color" value="#667085" aria-label="Link colour" />
+        </div>
+      </div>
+    </div>
+
+    <div class="tips">
+      <div class="section-label">How to use</div>
+      <div class="tip"><kbd>1</kbd><span>Text: click an empty spot, type, then press Enter.</span></div>
+      <div class="tip"><kbd>2</kbd><span>Link: click one bubble, then click another.</span></div>
+      <div class="tip"><kbd>3</kbd><span>Pan: drag empty canvas space in any direction.</span></div>
+      <div class="tip"><kbd>⌘/Ctrl Z</kbd><span>Undo. <kbd>⌘/Ctrl Y</kbd> or <kbd>⌘/Ctrl Shift Z</kbd> redo.</span></div>
+    </div>
+  </aside>
+
+  <main id="canvasViewport" aria-label="Infinite mind map canvas">
+    <div id="world">
+      <svg id="links" aria-hidden="true"></svg>
+      <div id="bubbles"></div>
+    </div>
+  </main>
+
+  <div id="status">Pan mode · drag the canvas</div>
+</div>
+
+<script>
+(() => {
+  const viewport = document.getElementById('canvasViewport');
+  const world = document.getElementById('world');
+  const bubblesLayer = document.getElementById('bubbles');
+  const linksSvg = document.getElementById('links');
+  const statusEl = document.getElementById('status');
+
+  const undoBtn = document.getElementById('undoBtn');
+  const redoBtn = document.getElementById('redoBtn');
+  const themeSelect = document.getElementById('themeSelect');
+  const lineColorInput = document.getElementById('lineColor');
+
+  const TOOL_LABELS = {
+    pan: 'Pan mode · drag the canvas',
+    text: 'Text mode · click an empty spot to add a bubble',
+    erase: 'Erase mode · click a bubble to remove it',
+    link: 'Link mode · click a bubble, then another bubble'
+  };
+
+  const state = {
+    tool: 'pan',
+    bubbles: [],
+    links: [],
+    nextId: 1,
+    panX: 280,
+    panY: 120,
+    selectedLinkBubble: null,
+    theme: 'light',
+    lineColor: '#667085'
+  };
+
+  let history = [];
+  let historyIndex = -1;
+
+  function makeSnapshot() {
+    return JSON.stringify({
+      bubbles: state.bubbles.map(b => ({ id: b.id, x: b.x, y: b.y, text: b.text })),
+      links: state.links.map(l => ({ a: l.a, b: l.b })),
+      nextId: state.nextId,
+      theme: state.theme,
+      lineColor: state.lineColor
+    });
+  }
+
+  function restoreSnapshot(snapshot) {
+    const data = JSON.parse(snapshot);
+    state.bubbles = data.bubbles || [];
+    state.links = data.links || [];
+    state.nextId = data.nextId || 1;
+    state.theme = data.theme || 'light';
+    state.lineColor = data.lineColor || '#667085';
+    themeSelect.value = state.theme;
+    lineColorInput.value = state.lineColor;
+    applyTheme();
+    state.selectedLinkBubble = null;
+    render();
+  }
+
+  function saveHistory() {
+    const snapshot = makeSnapshot();
+    if (history[historyIndex] === snapshot) return;
+    history = history.slice(0, historyIndex + 1);
+    history.push(snapshot);
+    historyIndex++;
+    updateHistoryButtons();
+  }
+
+  function updateHistoryButtons() {
+    undoBtn.disabled = historyIndex <= 0;
+    redoBtn.disabled = historyIndex >= history.length - 1;
+  }
+
+  function undo() {
+    if (historyIndex <= 0) return;
+    historyIndex--;
+    restoreSnapshot(history[historyIndex]);
+    updateHistoryButtons();
+  }
+
+  function redo() {
+    if (historyIndex >= history.length - 1) return;
+    historyIndex++;
+    restoreSnapshot(history[historyIndex]);
+    updateHistoryButtons();
+  }
+
+  function applyTheme() {
+    document.body.classList.toggle('dark', state.theme === 'dark');
+  }
+
+  function setTool(tool) {
+    state.tool = tool;
+    state.selectedLinkBubble = null;
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tool === tool);
+    });
+    statusEl.textContent = TOOL_LABELS[tool];
+    render();
+  }
+
+  function screenToWorld(clientX, clientY) {
+    const rect = viewport.getBoundingClientRect();
+    return {
+      x: clientX - rect.left - state.panX,
+      y: clientY - rect.top - state.panY
+    };
+  }
+
+  function addBubble(x, y, text) {
+    const clean = text.trim();
+    if (!clean) return;
+    state.bubbles.push({ id: state.nextId++, x, y, text: clean });
+    saveHistory();
+    render();
+  }
+
+  function deleteBubble(id) {
+    const before = state.bubbles.length;
+    state.bubbles = state.bubbles.filter(b => b.id !== id);
+    if (state.bubbles.length === before) return;
+    state.links = state.links.filter(l => l.a !== id && l.b !== id);
+    state.selectedLinkBubble = null;
+    saveHistory();
+    render();
+  }
+
+  function linkBubbles(a, b) {
+    if (a === b) return;
+    const exists = state.links.some(l => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+    if (exists) {
+      state.selectedLinkBubble = null;
+      render();
+      return;
+    }
+    state.links.push({ a, b });
+    state.selectedLinkBubble = null;
+    saveHistory();
+    render();
+  }
+
+  function bubbleById(id) {
+    return state.bubbles.find(b => b.id === id);
+  }
+
+  function render() {
+    world.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+
+    bubblesLayer.innerHTML = '';
+
+    state.bubbles.forEach(bubble => {
+      const el = document.createElement('div');
+      el.className = 'bubble';
+      if (state.selectedLinkBubble === bubble.id) el.classList.add('selected');
+      el.style.left = `${bubble.x}px`;
+      el.style.top = `${bubble.y}px`;
+      el.dataset.id = bubble.id;
+      el.textContent = bubble.text;
+
+      el.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+
+        if (state.tool === 'erase') {
+          deleteBubble(bubble.id);
+          return;
+        }
+
+        if (state.tool === 'link') {
+          if (state.selectedLinkBubble == null) {
+            state.selectedLinkBubble = bubble.id;
+            render();
+          } else if (state.selectedLinkBubble === bubble.id) {
+            state.selectedLinkBubble = null;
+            render();
+          } else {
+            linkBubbles(state.selectedLinkBubble, bubble.id);
+          }
+          return;
+        }
+      });
+
+      bubblesLayer.appendChild(el);
+    });
+
+    requestAnimationFrame(renderLinks);
+  }
+
+  function renderLinks() {
+    linksSvg.innerHTML = '';
+    linksSvg.style.setProperty('--line', state.lineColor);
+
+    for (const link of state.links) {
+      const a = bubbleById(link.a);
+      const b = bubbleById(link.b);
+      if (!a || !b) continue;
+
+      const aEl = bubblesLayer.querySelector(`[data-id="${a.id}"]`);
+      const bEl = bubblesLayer.querySelector(`[data-id="${b.id}"]`);
+      if (!aEl || !bEl) continue;
+
+      const x1 = a.x;
+      const y1 = a.y;
+      const x2 = b.x;
+      const y2 = b.y;
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      line.style.stroke = state.lineColor;
+      linksSvg.appendChild(line);
+    }
+  }
+
+  function startTextBubble(clientX, clientY) {
+    const p = screenToWorld(clientX, clientY);
+
+    const temp = document.createElement('div');
+    temp.className = 'bubble editing';
+    temp.style.left = `${p.x}px`;
+    temp.style.top = `${p.y}px`;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Type and press Enter…';
+    input.maxLength = 180;
+
+    temp.appendChild(input);
+    bubblesLayer.appendChild(temp);
+    input.focus();
+
+    let finished = false;
+
+    function finish() {
+      if (finished) return;
+      finished = true;
+      const text = input.value.trim();
+      temp.remove();
+      if (text) {
+        addBubble(p.x, p.y, text);
+      }
+    }
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finish();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finished = true;
+        temp.remove();
+      }
+    });
+
+    input.addEventListener('blur', finish);
+
+    temp.addEventListener('pointerdown', e => e.stopPropagation());
+  }
+
+  let panPointerId = null;
+  let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
+
+  viewport.addEventListener('pointerdown', e => {
+    if (e.button !== 0 && e.pointerType !== 'touch') return;
+
+    if (state.tool === 'text') {
+      // Only create when clicking empty canvas, not an existing bubble.
+      if (e.target === viewport || e.target === world || e.target === bubblesLayer || e.target === linksSvg) {
+        startTextBubble(e.clientX, e.clientY);
+      }
+      return;
+    }
+
+    if (state.tool === 'erase' || state.tool === 'link') return;
+
+    // Pan mode.
+    panPointerId = e.pointerId;
+    panStart = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: state.panX,
+      panY: state.panY
+    };
+    viewport.classList.add('is-panning');
+    viewport.setPointerCapture(e.pointerId);
+  });
+
+  viewport.addEventListener('pointermove', e => {
+    if (panPointerId !== e.pointerId) return;
+    state.panX = panStart.panX + (e.clientX - panStart.x);
+    state.panY = panStart.panY + (e.clientY - panStart.y);
+    world.style.transform = `translate(${state.panX}px, ${state.panY}px)`;
+  });
+
+  function endPan(e) {
+    if (panPointerId !== e.pointerId) return;
+    panPointerId = null;
+    viewport.classList.remove('is-panning');
+  }
+
+  viewport.addEventListener('pointerup', endPan);
+  viewport.addEventListener('pointercancel', endPan);
+
+  // Toolbar
+  document.querySelectorAll('.tool-btn').forEach(btn => {
+    btn.addEventListener('click', () => setTool(btn.dataset.tool));
+  });
+
+  undoBtn.addEventListener('click', undo);
+  redoBtn.addEventListener('click', redo);
+
+  themeSelect.addEventListener('change', () => {
+    state.theme = themeSelect.value;
+    applyTheme();
+    saveHistory();
+  });
+
+  lineColorInput.addEventListener('input', () => {
+    state.lineColor = lineColorInput.value;
+    renderLinks();
+  });
+
+  lineColorInput.addEventListener('change', () => {
+    saveHistory();
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    const mod = e.ctrlKey || e.metaKey;
+
+    if (mod && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      redo();
+      return;
+    }
+
+    if (e.key === '1') setTool('text');
+    if (e.key === '2') setTool('erase');
+    if (e.key === '3') setTool('link');
+    if (e.key === '0') setTool('pan');
+    if (e.key === 'Escape') {
+      state.selectedLinkBubble = null;
+      render();
+    }
+  });
+
+  // Initial state.
+  applyTheme();
+  saveHistory();
+  render();
+})();
+</script>
+</body>
+</html>
